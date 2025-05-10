@@ -6,6 +6,7 @@
     <title>EST Math Solver</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .equation-input {
@@ -50,6 +51,19 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        .ocr-progress {
+            height: 4px;
+            background-color: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .ocr-progress-bar {
+            height: 100%;
+            background-color: #4f46e5;
+            width: 0%;
+            transition: width 0.3s;
         }
     </style>
 </head>
@@ -117,6 +131,9 @@
                                 </button>
                             </div>
                             <img id="image-preview" class="camera-preview" src="" alt="Uploaded equation">
+                            <div id="ocr-progress" class="ocr-progress hidden">
+                                <div id="ocr-progress-bar" class="ocr-progress-bar"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -189,6 +206,9 @@
             </div>
             <h3 class="text-lg font-semibold mb-2">Processing Image</h3>
             <p class="text-gray-600">Please wait while we analyze your math problem...</p>
+            <div id="ocr-progress-modal" class="w-full bg-gray-200 rounded-full h-2.5 mt-4">
+                <div id="ocr-progress-bar-modal" class="bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
         </div>
     </div>
 
@@ -216,6 +236,9 @@
         const clearHistory = document.getElementById('clear-history');
         const emptyHistoryMessage = document.getElementById('empty-history-message');
         const loadingModal = document.getElementById('loading-modal');
+        const ocrProgress = document.getElementById('ocr-progress');
+        const ocrProgressBar = document.getElementById('ocr-progress-bar');
+        const ocrProgressBarModal = document.getElementById('ocr-progress-bar-modal');
 
         // Variables
         let stream = null;
@@ -481,14 +504,8 @@
             showImageUpload();
             imagePreviewContainer.classList.remove('hidden');
             
-            // Show loading modal while processing
-            loadingModal.classList.remove('hidden');
-            
-            // Process the image (in a real app, you'd send this to an OCR API)
-            setTimeout(() => {
-                processImage(imageUrl);
-                loadingModal.classList.add('hidden');
-            }, 1500);
+            // Process the image with OCR
+            processImage(imageUrl);
         }
 
         function showImageUpload() {
@@ -510,13 +527,8 @@
                     imagePreview.src = event.target.result;
                     imagePreviewContainer.classList.remove('hidden');
                     
-                    // Show loading modal while processing
-                    loadingModal.classList.remove('hidden');
-                    
-                    setTimeout(() => {
-                        processImage(event.target.result);
-                        loadingModal.classList.add('hidden');
-                    }, 1500);
+                    // Process the image with OCR
+                    processImage(event.target.result);
                 };
                 reader.readAsDataURL(file);
             }
@@ -528,18 +540,124 @@
             fileUpload.value = '';
         }
 
-        // Simulated OCR function - in a real app, you'd call an OCR API here
+        // Process image with OCR
         function processImage(imageData) {
-            // For demonstration purposes, we'll show the image and let the user type the equation
-            solutionSteps.innerHTML = `
-                <div class="p-4 bg-blue-50 rounded-lg">
-                    <h4 class="font-medium text-blue-800 mb-2">Image Captured</h4>
-                    <p class="text-gray-600 mb-2">Please type the equation from the image above</p>
-                    <p class="text-sm text-gray-500">Note: In a real application, this would use OCR to extract the equation automatically.</p>
-                </div>
-            `;
+            // Show loading modal and progress bar
+            loadingModal.classList.remove('hidden');
+            ocrProgress.classList.remove('hidden');
             
-            solutionContainer.classList.remove('hidden');
+            // Reset progress bars
+            ocrProgressBar.style.width = '0%';
+            ocrProgressBarModal.style.width = '0%';
+            
+            // Use Tesseract.js for OCR
+            Tesseract.recognize(
+                imageData,
+                'eng',
+                {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            const progress = Math.round(m.progress * 100);
+                            ocrProgressBar.style.width = `${progress}%`;
+                            ocrProgressBarModal.style.width = `${progress}%`;
+                        }
+                    }
+                }
+            ).then(({ data: { text } }) => {
+                // Hide loading modal
+                loadingModal.classList.add('hidden');
+                
+                // Process the extracted text to find equations
+                const equations = extractEquations(text);
+                
+                if (equations.length > 0) {
+                    // Use the first found equation
+                    const equation = equations[0];
+                    
+                    // Update the input field
+                    equationInput.value = equation;
+                    
+                    // Show the extracted equation
+                    solutionSteps.innerHTML = `
+                        <div class="p-4 bg-blue-50 rounded-lg">
+                            <h4 class="font-medium text-blue-800 mb-2">Extracted Equation:</h4>
+                            <p class="text-lg">${equation}</p>
+                        </div>
+                        <div class="p-4 bg-yellow-50 rounded-lg">
+                            <p class="text-sm text-yellow-800">Click "Solve Equation" to calculate the result.</p>
+                        </div>
+                    `;
+                    
+                    solutionContainer.classList.remove('hidden');
+                } else {
+                    // No equations found
+                    solutionSteps.innerHTML = `
+                        <div class="p-4 bg-red-50 rounded-lg">
+                            <h4 class="font-medium text-red-800 mb-2">No Equation Found</h4>
+                            <p class="text-sm text-red-600">We couldn't find any equations in the image. Please try again or type the equation manually.</p>
+                        </div>
+                    `;
+                    
+                    solutionContainer.classList.remove('hidden');
+                }
+            }).catch(err => {
+                console.error('OCR Error:', err);
+                loadingModal.classList.add('hidden');
+                
+                solutionSteps.innerHTML = `
+                    <div class="p-4 bg-red-50 rounded-lg">
+                        <h4 class="font-medium text-red-800 mb-2">OCR Processing Error</h4>
+                        <p class="text-sm text-red-600">There was an error processing the image. Please try again or type the equation manually.</p>
+                    </div>
+                `;
+                
+                solutionContainer.classList.remove('hidden');
+            });
+        }
+
+        // Helper function to extract equations from OCR text
+        function extractEquations(text) {
+            // Normalize the text
+            text = text.replace(/\s+/g, ' ').trim();
+            
+            // Common patterns for equations
+            const equationPatterns = [
+                // Simple equations like "2x + 5 = 15"
+                /([0-9]+[xXyYzZ]?\s*[+\-*/^]\s*)+[0-9]+[xXyYzZ]?\s*=\s*[0-9]+/g,
+                // Equations with functions like "sin(x) + cos(y) = 1"
+                /(sin|cos|tan|log|sqrt|exp)\([xXyYzZ0-9+\-*/^ ]+\)\s*[+\-*/^]?\s*[0-9xXyYzZ]+\s*=\s*[0-9]+/g,
+                // Equations with exponents like "x^2 + y^2 = 25"
+                /[xXyYzZ]\^[0-9]+\s*[+\-*/^]?\s*[xXyYzZ]\^[0-9]+\s*=\s*[0-9]+/g,
+                // Simple expressions that can be evaluated
+                /([0-9]+\s*[+\-*/^]\s*)+[0-9]+/g
+            ];
+            
+            const foundEquations = [];
+            
+            // Check each pattern
+            equationPatterns.forEach(pattern => {
+                const matches = text.match(pattern);
+                if (matches) {
+                    matches.forEach(match => {
+                        // Clean up the equation
+                        let equation = match
+                            .replace(/\s+/g, '') // Remove all spaces
+                            .replace(/[xX]/g, 'x') // Standardize variables
+                            .replace(/[yY]/g, 'y')
+                            .replace(/[zZ]/g, 'z')
+                            .replace(/\*/g, '*') // Standardize operators
+                            .replace(/\//g, '/')
+                            .replace(/\^/g, '^');
+                        
+                        // Add to found equations if not already there
+                        if (!foundEquations.includes(equation)) {
+                            foundEquations.push(equation);
+                        }
+                    });
+                }
+            });
+            
+            return foundEquations;
         }
 
         function addToHistory(equation, result) {
