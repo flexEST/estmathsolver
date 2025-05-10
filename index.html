@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EST Math Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.7.0/math.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .equation-input {
+            font-family: 'Courier New', monospace;
+            font-size: 1.2rem;
+        }
+        .history-item:hover {
+            background-color: #f3f4f6;
+            cursor: pointer;
+        }
+        .camera-preview {
+            width: 100%;
+            max-height: 300px;
+            object-fit: contain;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+        }
+        .math-symbol {
+            font-size: 1.5rem;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .math-symbol:hover {
+            background-color: #e5e7eb;
+            border-radius: 0.25rem;
+        }
+        #dropzone {
+            border: 2px dashed #ccc;
+            transition: all 0.3s;
+        }
+        #dropzone.drag-over {
+            border-color: #666;
+            background-color: #f0f9ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-indigo-700 mb-2">EST Math Solver</h1>
+            <p class="text-gray-600">Type or upload an image of your math problem and get the solution instantly</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Enter Your Equation</h2>
+                        <div class="flex space-x-2">
+                            <button id="clear-btn" class="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">
+                                <i class="fas fa-eraser mr-1"></i> Clear
+                            </button>
+                            <button id="camera-btn" class="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition">
+                                <i class="fas fa-camera mr-1"></i> Camera
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="equation-input-container" class="mb-4">
+                        <div class="flex items-center border border-gray-300 rounded-lg px-4 py-3 equation-input">
+                            <span class="text-gray-500 mr-2">y =</span>
+                            <input type="text" id="equation-input" class="flex-1 outline-none" placeholder="e.g., 2x + 5 = 15" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div id="symbols-container" class="mb-4 flex flex-wrap gap-2">
+                        <span class="math-symbol" onclick="insertSymbol('+')">+</span>
+                        <span class="math-symbol" onclick="insertSymbol('-')">−</span>
+                        <span class="math-symbol" onclick="insertSymbol('*')">×</span>
+                        <span class="math-symbol" onclick="insertSymbol('/')">÷</span>
+                        <span class="math-symbol" onclick="insertSymbol('^')">^</span>
+                        <span class="math-symbol" onclick="insertSymbol('(')">(</span>
+                        <span class="math-symbol" onclick="insertSymbol(')')">)</span>
+                        <span class="math-symbol" onclick="insertSymbol('sqrt(')">√</span>
+                        <span class="math-symbol" onclick="insertSymbol('sin(')">sin</span>
+                        <span class="math-symbol" onclick="insertSymbol('cos(')">cos</span>
+                        <span class="math-symbol" onclick="insertSymbol('tan(')">tan</span>
+                        <span class="math-symbol" onclick="insertSymbol('log(')">log</span>
+                        <span class="math-symbol" onclick="insertSymbol('pi')">π</span>
+                        <span class="math-symbol" onclick="insertSymbol('e')">e</span>
+                    </div>
+
+                    <div id="image-upload-container" class="hidden mb-4">
+                        <div id="dropzone" class="p-4 rounded-lg text-center cursor-pointer">
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+                            <p class="text-gray-600">Drag & drop your math problem image here</p>
+                            <p class="text-sm text-gray-500 mt-2">or</p>
+                            <label for="file-upload" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg inline-block hover:bg-blue-700 cursor-pointer">
+                                <i class="fas fa-folder-open mr-2"></i> Browse Files
+                            </label>
+                            <input id="file-upload" type="file" accept="image/*" class="hidden">
+                        </div>
+                        <div id="image-preview-container" class="mt-4 hidden">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="font-medium">Image Preview</h3>
+                                <button id="remove-image" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </div>
+                            <img id="image-preview" class="camera-preview" src="" alt="Uploaded equation">
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center">
+                        <button id="solve-btn" class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition flex items-center">
+                            <i class="fas fa-calculator mr-2"></i> Solve Equation
+                        </button>
+                    </div>
+                </div>
+
+                <div id="solution-container" class="bg-white rounded-xl shadow-md p-6 hidden">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Solution</h2>
+                    <div id="solution-steps" class="space-y-4">
+                        <!-- Solution steps will be inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-xl shadow-md p-6 sticky top-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">History</h2>
+                        <button id="clear-history" class="text-sm text-red-500 hover:text-red-700">
+                            <i class="fas fa-trash-alt mr-1"></i> Clear
+                        </button>
+                    </div>
+                    <div id="history-list" class="space-y-2 max-h-[500px] overflow-y-auto">
+                        <!-- History items will be inserted here -->
+                        <p id="empty-history-message" class="text-gray-500 text-center py-4">No history yet. Solve some equations!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="camera-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Take a Photo</h3>
+                <button id="close-camera" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <video id="camera-feed" class="w-full rounded-lg bg-black" autoplay playsinline></video>
+            </div>
+            <div class="flex justify-center space-x-4">
+                <button id="capture-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                    <i class="fas fa-camera mr-2"></i> Capture
+                </button>
+                <button id="upload-instead" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                    <i class="fas fa-upload mr-2"></i> Upload Instead
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const equationInput = document.getElementById('equation-input');
+        const solveBtn = document.getElementById('solve-btn');
+        const solutionContainer = document.getElementById('solution-container');
+        const solutionSteps = document.getElementById('solution-steps');
+        const clearBtn = document.getElementById('clear-btn');
+        const cameraBtn = document.getElementById('camera-btn');
+        const cameraModal = document.getElementById('camera-modal');
+        const closeCamera = document.getElementById('close-camera');
+        const cameraFeed = document.getElementById('camera-feed');
+        const captureBtn = document.getElementById('capture-btn');
+        const uploadInstead = document.getElementById('upload-instead');
+        const imageUploadContainer = document.getElementById('image-upload-container');
+        const dropzone = document.getElementById('dropzone');
+        const fileUpload = document.getElementById('file-upload');
+        const imagePreviewContainer = document.getElementById('image-preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const removeImage = document.getElementById('remove-image');
+        const historyList = document.getElementById('history-list');
+        const clearHistory = document.getElementById('clear-history');
+        const emptyHistoryMessage = document.getElementById('empty-history-message');
+
+        // Variables
+        let stream = null;
+        let history = JSON.parse(localStorage.getItem('mathSolverHistory')) || [];
+
+        // Initialize
+        updateHistoryDisplay();
+
+        // Event Listeners
+        equationInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                solveEquation();
+            }
+        });
+
+        solveBtn.addEventListener('click', solveEquation);
+        clearBtn.addEventListener('click', clearEquation);
+        cameraBtn.addEventListener('click', openCameraModal);
+        closeCamera.addEventListener('click', closeCameraModal);
+        captureBtn.addEventListener('click', captureImage);
+        uploadInstead.addEventListener('click', () => {
+            closeCameraModal();
+            showImageUpload();
+        });
+        fileUpload.addEventListener('change', handleFileUpload);
+        removeImage.addEventListener('click', removeUploadedImage);
+        clearHistory.addEventListener('click', clearAllHistory);
+
+        // Drag and drop events
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+
+        dropzone.addEventListener('drop', handleDrop, false);
+
+        // Functions
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight() {
+            dropzone.classList.add('drag-over');
+        }
+
+        function unhighlight() {
+            dropzone.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                handleFileUpload({ target: { files } });
+            }
+        }
+
+        function insertSymbol(symbol) {
+            const startPos = equationInput.selectionStart;
+            const endPos = equationInput.selectionEnd;
+            const currentValue = equationInput.value;
+            
+            equationInput.value = currentValue.substring(0, startPos) + symbol + currentValue.substring(endPos);
+            
+            // Set cursor position after the inserted symbol
+            equationInput.selectionStart = equationInput.selectionEnd = startPos + symbol.length;
+            equationInput.focus();
+        }
+
+        function solveEquation() {
+            const equation = equationInput.value.trim();
+            
+            if (!equation) {
+                showAlert('Please enter an equation to solve');
+                return;
+            }
+
+            try {
+                // Try to evaluate the equation
+                const result = math.evaluate(equation);
+                
+                // Format the solution steps
+                solutionSteps.innerHTML = `
+                    <div class="p-4 bg-blue-50 rounded-lg">
+                        <h4 class="font-medium text-blue-800 mb-2">Original Equation:</h4>
+                        <p class="text-lg">${equation}</p>
+                    </div>
+                    <div class="p-4 bg-green-50 rounded-lg">
+                        <h4 class="font-medium text-green-800 mb-2">Solution:</h4>
+                        <p class="text-2xl font-bold">${result}</p>
+                    </div>
+                `;
+                
+                solutionContainer.classList.remove('hidden');
+                
+                // Add to history
+                addToHistory(equation, result);
+                
+            } catch (error) {
+                showAlert('Could not solve the equation. Please check your input.');
+                console.error(error);
+            }
+        }
+
+        function clearEquation() {
+            equationInput.value = '';
+            solutionContainer.classList.add('hidden');
+            hideImageUpload();
+            equationInput.focus();
+        }
+
+        function showAlert(message) {
+            // Remove any existing alerts
+            const existingAlert = document.querySelector('.alert-message');
+            if (existingAlert) {
+                existingAlert.remove();
+            }
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert-message fixed top-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-lg z-50';
+            alertDiv.innerHTML = `<p>${message}</p>`;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 3000);
+        }
+
+        function openCameraModal() {
+            cameraModal.classList.remove('hidden');
+            hideImageUpload();
+            
+            // Access camera
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(s => {
+                    stream = s;
+                    cameraFeed.srcObject = stream;
+                })
+                .catch(err => {
+                    console.error('Error accessing camera:', err);
+                    showAlert('Could not access camera. Please check permissions.');
+                    closeCameraModal();
+                    showImageUpload();
+                });
+        }
+
+        function closeCameraModal() {
+            cameraModal.classList.add('hidden');
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+        }
+
+        function captureImage() {
+            const canvas = document.createElement('canvas');
+            const video = cameraFeed;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageUrl = canvas.toDataURL('image/png');
+            imagePreview.src = imageUrl;
+            
+            closeCameraModal();
+            showImageUpload();
+            processImage(imageUrl);
+        }
+
+        function showImageUpload() {
+            imageUploadContainer.classList.remove('hidden');
+            equationInput.placeholder = "Or type your equation here";
+        }
+
+        function hideImageUpload() {
+            imageUploadContainer.classList.add('hidden');
+            imagePreviewContainer.classList.add('hidden');
+            equationInput.placeholder = "e.g., 2x + 5 = 15";
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    imagePreview.src = event.target.result;
+                    imagePreviewContainer.classList.remove('hidden');
+                    processImage(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeUploadedImage() {
+            imagePreview.src = '';
+            imagePreviewContainer.classList.add('hidden');
+            fileUpload.value = '';
+        }
+
+        // Simulated OCR function - in a real app, you'd call an OCR API here
+        function processImage(imageData) {
+            // Show loading state
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'text-center py-4';
+            loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-500 mr-2"></i> Processing image...';
+            solutionSteps.innerHTML = '';
+            solutionSteps.appendChild(loadingDiv);
+            solutionContainer.classList.remove('hidden');
+            
+            // Simulate OCR processing delay
+            setTimeout(() => {
+                // This is a simulation - in reality you'd get this from an OCR API
+                const simulatedEquations = [
+                    "3x + 5 = 20",
+                    "2^(x+1) = 16",
+                    "sqrt(9) + 4 * 2",
+                    "sin(pi/2) + cos(0)",
+                    "log(100, 10)"
+                ];
+                
+                const randomEquation = simulatedEquations[Math.floor(Math.random() * simulatedEquations.length)];
+                
+                // Update the input field with the "recognized" equation
+                equationInput.value = randomEquation;
+                
+                // Solve it automatically
+                solveEquation();
+                
+            }, 2000);
+        }
+
+        function addToHistory(equation, result) {
+            const timestamp = new Date().toISOString();
+            const historyItem = { equation, result, timestamp };
+            
+            // Add to beginning of array
+            history.unshift(historyItem);
+            
+            // Keep only last 20 items
+            if (history.length > 20) {
+                history = history.slice(0, 20);
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('mathSolverHistory', JSON.stringify(history));
+            
+            // Update display
+            updateHistoryDisplay();
+        }
+
+        function updateHistoryDisplay() {
+            if (history.length === 0) {
+                emptyHistoryMessage.classList.remove('hidden');
+                historyList.innerHTML = '';
+                return;
+            }
+            
+            emptyHistoryMessage.classList.add('hidden');
+            
+            historyList.innerHTML = history.map((item, index) => `
+                <div class="history-item p-3 rounded-lg border border-gray-200" onclick="loadHistoryItem(${index})">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 truncate mr-2">${item.equation}</div>
+                        <div class="text-sm font-semibold text-indigo-600">${item.result}</div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">${new Date(item.timestamp).toLocaleString()}</div>
+                </div>
+            `).join('');
+        }
+
+        function loadHistoryItem(index) {
+            const item = history[index];
+            equationInput.value = item.equation;
+            solveEquation();
+        }
+
+        function clearAllHistory() {
+            if (confirm('Are you sure you want to clear all history?')) {
+                history = [];
+                localStorage.removeItem('mathSolverHistory');
+                updateHistoryDisplay();
+            }
+        }
+
+        // Make functions available globally for onclick handlers
+        window.insertSymbol = insertSymbol;
+        window.loadHistoryItem = loadHistoryItem;
+    </script>
+</body>
+</html>
