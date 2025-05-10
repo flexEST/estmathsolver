@@ -44,6 +44,13 @@
         .flip-horizontal {
             transform: scaleX(-1);
         }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -154,8 +161,11 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="mb-4">
+            <div class="mb-4 relative">
                 <video id="camera-feed" class="w-full rounded-lg bg-black" autoplay playsinline></video>
+                <div id="camera-overlay" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="border-2 border-dashed border-white rounded-lg w-3/4 h-1/2"></div>
+                </div>
             </div>
             <div class="flex justify-center space-x-4">
                 <button id="capture-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
@@ -168,6 +178,17 @@
                     <i class="fas fa-sync-alt mr-2"></i> Switch Camera
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loading-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm text-center">
+            <div class="flex justify-center mb-4">
+                <i class="fas fa-circle-notch text-4xl text-indigo-600 loading-spinner"></i>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">Processing Image</h3>
+            <p class="text-gray-600">Please wait while we analyze your math problem...</p>
         </div>
     </div>
 
@@ -194,11 +215,11 @@
         const historyList = document.getElementById('history-list');
         const clearHistory = document.getElementById('clear-history');
         const emptyHistoryMessage = document.getElementById('empty-history-message');
+        const loadingModal = document.getElementById('loading-modal');
 
         // Variables
         let stream = null;
         let history = JSON.parse(localStorage.getItem('mathSolverHistory')) || [];
-        let currentFacingMode = 'environment'; // Default to rear camera
         let devices = [];
         let currentDeviceIndex = 0;
 
@@ -339,10 +360,10 @@
             cameraModal.classList.remove('hidden');
             hideImageUpload();
             
-            // Access camera with rear (environment) facing mode by default
+            // First try to get rear camera (environment)
             const constraints = {
                 video: {
-                    facingMode: currentFacingMode,
+                    facingMode: { ideal: 'environment' },
                     width: { ideal: 1280 },
                     height: { ideal: 720 }
                 }
@@ -359,12 +380,47 @@
                 .then(mediaDevices => {
                     devices = mediaDevices.filter(device => device.kind === 'videoinput');
                     console.log('Available video devices:', devices);
+                    
+                    // If we have multiple cameras, enable switch button
+                    if (devices.length > 1) {
+                        switchCameraBtn.classList.remove('hidden');
+                    } else {
+                        switchCameraBtn.classList.add('hidden');
+                    }
                 })
                 .catch(err => {
-                    console.error('Error accessing camera:', err);
-                    showAlert('Could not access camera. Please check permissions.');
-                    closeCameraModal();
-                    showImageUpload();
+                    console.error('Error accessing rear camera:', err);
+                    
+                    // If rear camera fails, try any camera
+                    const fallbackConstraints = {
+                        video: {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        }
+                    };
+                    
+                    return navigator.mediaDevices.getUserMedia(fallbackConstraints)
+                        .then(s => {
+                            stream = s;
+                            cameraFeed.srcObject = stream;
+                            return navigator.mediaDevices.enumerateDevices();
+                        })
+                        .then(mediaDevices => {
+                            devices = mediaDevices.filter(device => device.kind === 'videoinput');
+                            console.log('Available video devices:', devices);
+                            
+                            if (devices.length > 1) {
+                                switchCameraBtn.classList.remove('hidden');
+                            } else {
+                                switchCameraBtn.classList.add('hidden');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error accessing any camera:', err);
+                            showAlert('Could not access camera. Please check permissions.');
+                            closeCameraModal();
+                            showImageUpload();
+                        });
                 });
         }
 
@@ -404,9 +460,6 @@
                 .then(s => {
                     stream = s;
                     cameraFeed.srcObject = stream;
-                    
-                    // Update facing mode
-                    currentFacingMode = currentDeviceIndex === 0 ? 'environment' : 'user';
                 })
                 .catch(err => {
                     console.error('Error switching camera:', err);
@@ -426,7 +479,16 @@
             
             closeCameraModal();
             showImageUpload();
-            processImage(imageUrl);
+            imagePreviewContainer.classList.remove('hidden');
+            
+            // Show loading modal while processing
+            loadingModal.classList.remove('hidden');
+            
+            // Process the image (in a real app, you'd send this to an OCR API)
+            setTimeout(() => {
+                processImage(imageUrl);
+                loadingModal.classList.add('hidden');
+            }, 1500);
         }
 
         function showImageUpload() {
@@ -447,7 +509,14 @@
                 reader.onload = function(event) {
                     imagePreview.src = event.target.result;
                     imagePreviewContainer.classList.remove('hidden');
-                    processImage(event.target.result);
+                    
+                    // Show loading modal while processing
+                    loadingModal.classList.remove('hidden');
+                    
+                    setTimeout(() => {
+                        processImage(event.target.result);
+                        loadingModal.classList.add('hidden');
+                    }, 1500);
                 };
                 reader.readAsDataURL(file);
             }
@@ -461,34 +530,16 @@
 
         // Simulated OCR function - in a real app, you'd call an OCR API here
         function processImage(imageData) {
-            // Show loading state
-            const loadingDiv = document.createElement('div');
-            loadingDiv.className = 'text-center py-4';
-            loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-500 mr-2"></i> Processing image...';
-            solutionSteps.innerHTML = '';
-            solutionSteps.appendChild(loadingDiv);
-            solutionContainer.classList.remove('hidden');
+            // For demonstration purposes, we'll show the image and let the user type the equation
+            solutionSteps.innerHTML = `
+                <div class="p-4 bg-blue-50 rounded-lg">
+                    <h4 class="font-medium text-blue-800 mb-2">Image Captured</h4>
+                    <p class="text-gray-600 mb-2">Please type the equation from the image above</p>
+                    <p class="text-sm text-gray-500">Note: In a real application, this would use OCR to extract the equation automatically.</p>
+                </div>
+            `;
             
-            // Simulate OCR processing delay
-            setTimeout(() => {
-                // This is a simulation - in reality you'd get this from an OCR API
-                const simulatedEquations = [
-                    "3x + 5 = 20",
-                    "2^(x+1) = 16",
-                    "sqrt(9) + 4 * 2",
-                    "sin(pi/2) + cos(0)",
-                    "log(100, 10)"
-                ];
-                
-                const randomEquation = simulatedEquations[Math.floor(Math.random() * simulatedEquations.length)];
-                
-                // Update the input field with the "recognized" equation
-                equationInput.value = randomEquation;
-                
-                // Solve it automatically
-                solveEquation();
-                
-            }, 2000);
+            solutionContainer.classList.remove('hidden');
         }
 
         function addToHistory(equation, result) {
