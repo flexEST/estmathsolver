@@ -41,6 +41,9 @@
             border-color: #666;
             background-color: #f0f9ff;
         }
+        .flip-horizontal {
+            transform: scaleX(-1);
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -161,6 +164,9 @@
                 <button id="upload-instead" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
                     <i class="fas fa-upload mr-2"></i> Upload Instead
                 </button>
+                <button id="switch-camera" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                    <i class="fas fa-sync-alt mr-2"></i> Switch Camera
+                </button>
             </div>
         </div>
     </div>
@@ -178,6 +184,7 @@
         const cameraFeed = document.getElementById('camera-feed');
         const captureBtn = document.getElementById('capture-btn');
         const uploadInstead = document.getElementById('upload-instead');
+        const switchCameraBtn = document.getElementById('switch-camera');
         const imageUploadContainer = document.getElementById('image-upload-container');
         const dropzone = document.getElementById('dropzone');
         const fileUpload = document.getElementById('file-upload');
@@ -191,6 +198,9 @@
         // Variables
         let stream = null;
         let history = JSON.parse(localStorage.getItem('mathSolverHistory')) || [];
+        let currentFacingMode = 'environment'; // Default to rear camera
+        let devices = [];
+        let currentDeviceIndex = 0;
 
         // Initialize
         updateHistoryDisplay();
@@ -211,6 +221,7 @@
             closeCameraModal();
             showImageUpload();
         });
+        switchCameraBtn.addEventListener('click', switchCamera);
         fileUpload.addEventListener('change', handleFileUpload);
         removeImage.addEventListener('click', removeUploadedImage);
         clearHistory.addEventListener('click', clearAllHistory);
@@ -328,11 +339,26 @@
             cameraModal.classList.remove('hidden');
             hideImageUpload();
             
-            // Access camera
-            navigator.mediaDevices.getUserMedia({ video: true })
+            // Access camera with rear (environment) facing mode by default
+            const constraints = {
+                video: {
+                    facingMode: currentFacingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(constraints)
                 .then(s => {
                     stream = s;
                     cameraFeed.srcObject = stream;
+                    
+                    // List available devices
+                    return navigator.mediaDevices.enumerateDevices();
+                })
+                .then(mediaDevices => {
+                    devices = mediaDevices.filter(device => device.kind === 'videoinput');
+                    console.log('Available video devices:', devices);
                 })
                 .catch(err => {
                     console.error('Error accessing camera:', err);
@@ -348,6 +374,44 @@
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
             }
+        }
+
+        function switchCamera() {
+            if (devices.length < 2) {
+                showAlert('Only one camera available');
+                return;
+            }
+            
+            // Cycle through available cameras
+            currentDeviceIndex = (currentDeviceIndex + 1) % devices.length;
+            const deviceId = devices[currentDeviceIndex].deviceId;
+            
+            // Stop current stream
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Start new stream with selected device
+            const constraints = {
+                video: {
+                    deviceId: { exact: deviceId },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+            
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(s => {
+                    stream = s;
+                    cameraFeed.srcObject = stream;
+                    
+                    // Update facing mode
+                    currentFacingMode = currentDeviceIndex === 0 ? 'environment' : 'user';
+                })
+                .catch(err => {
+                    console.error('Error switching camera:', err);
+                    showAlert('Could not switch camera');
+                });
         }
 
         function captureImage() {
